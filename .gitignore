@@ -7,3 +7,4 @@ order_downloads/
 credentials
 *.spec
 version_info.txt
+test.py
