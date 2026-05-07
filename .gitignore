@@ -1,0 +1,9 @@
+*__pycache__
+build/
+dist/
+logs/
+order_downloads/
+.env
+credentials
+*.spec
+version_info.txt
