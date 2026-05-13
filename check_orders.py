@@ -129,7 +129,7 @@ class CheckOrders:
         return f"#{order['id']}"
 
     @staticmethod
-    def fetch_unprinted_processing_orders(max_pages=2):
+    def fetch_unprinted_processing_orders(max_pages=3):
         """
         Fetch processing orders from the first max_pages pages.
         Skips orders that already have @ PRINTED in their notes.
@@ -144,7 +144,7 @@ class CheckOrders:
 
             r = CheckOrders.api_get('orders', params={
                 'status':   'processing',
-                'per_page': 200,
+                'per_page': 100,
                 'page':     page,
                 'orderby':  'date',
                 'order':    'desc',
