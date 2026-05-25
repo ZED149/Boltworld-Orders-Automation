@@ -25,6 +25,8 @@ LOGGER_DIR = os.getenv("LOGGER_DIR")
 EMAIL_NAMES_LIST = json.loads(os.environ["EMAIL_NAMES_LIST"])
 EMAIL_RECIPIENTS_LIST = json.loads(os.environ["EMAIL_RECIPIENTS_LIST"])
 EMAILS_DATA = zip(EMAIL_NAMES_LIST, EMAIL_RECIPIENTS_LIST)
+EMAIL_FROM_USERNAME = os.getenv("EMAIL_FROM_USERNAME")
+EMAIL_FROM_PASSWORD = os.getenv("EMAIL_FROM_PASSWORD")
 
 # ── Config — update these before running ──────────────────────────────────
 WP_URL          = os.getenv("WP_URL")
@@ -109,10 +111,20 @@ class CheckOrders:
         try:
             r     = CheckOrders.api_get(f'orders/{order_id}/notes')
             notes = r.json()
-            return any('PRINTED' in n.get('note', '').upper() for n in notes)
+            for note in notes:
+                if "DO NOT PRINT" in note['note'].upper():
+                    return {
+                        "type": False,
+                        "error": "DO NOT PRINT"
+                    }
+                if "PRINTED" in note['note'].upper():
+                    return True
         except Exception as e:
             print(f"    ✗ Could not fetch notes for {order_id}: {e}")
-            return False
+            return {
+                "type": False,
+                "error": "Could not fetch order notes"
+            }
 
     @staticmethod
     def get_order_number(order):
@@ -160,8 +172,18 @@ class CheckOrders:
                 order_id     = order['id']
                 order_number = CheckOrders.get_order_number(order)
 
-                if CheckOrders.has_printed_note(order_id):
+                # it means that order already has notes
+                result = CheckOrders.has_printed_note(order_id)
+                if result:
                     continue
+                if isinstance(result, dict):
+                    if result["type"] == False and result["error"] == "Could not fetch order notes":
+                        # means that some old older was given by the api which notes wasn't fetched. In this case ignore this order,
+                        # for printing un necessary orders
+                        continue
+                    if result["type"] == False and result["error"] == "DO NOT PRINT":
+                        # means we are not allowed to print this order, skipping it
+                        continue
 
                 counter += 1
                 orders_to_print.append({
@@ -747,8 +769,8 @@ class CheckOrders:
                 message = formatter.format(data=failed_orders, user_name=name)
                 mail_object.send_email(message=message,
                                     receiver_email=email,
-                                    sender_email='no-reply@zed149.com',
-                                    sender_password='NFAKisAlive@123',
+                                    sender_email=EMAIL_FROM_USERNAME,
+                                    sender_password=EMAIL_FROM_PASSWORD,
                                     email_subject='Development',
                                     sender_name="ZED Managment Systems")
 
