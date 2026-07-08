@@ -783,12 +783,6 @@ class CheckOrders:
                 invoice_printer, slip_printer,
                 failed=printing_failed_orders
             )
-        printing_failed_orders = [
-            "X #110407 — Packing Slip",
-            "X #110306 — Invoice",
-            "X #110312 — Invoice",
-            "X #110456 — Packing Slip"
-        ]
         if printing_failed_orders:
             # it means that printer has timed out and is to be notified to the admin
             # there are two cases. which order is missing PDF slip and which is missing PDF invoice.
