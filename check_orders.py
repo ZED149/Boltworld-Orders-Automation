@@ -388,7 +388,7 @@ class CheckOrders:
 
     @staticmethod
     def print_downloaded_orders(success_orders, invoice_dir, slip_dir,
-                                invoice_printer, slip_printer):
+                                invoice_printer, slip_printer, failed=[]):
 
         sumatra = CheckOrders.find_sumatra()
 
@@ -410,7 +410,7 @@ class CheckOrders:
         print(f"{'=' * 55}\n")
 
         printed = []
-        failed  = []
+        # failed  = []
 
         for order in success_orders:
             order_number = order['order_number'].replace('#', '')
@@ -776,11 +776,45 @@ class CheckOrders:
 
         # ── Print ─────────────────────────────────────────────────────────
 
+        printing_failed_orders = []
         if success_with_ids and invoice_printer and slip_printer:
             CheckOrders.print_downloaded_orders(
                 success_with_ids, invoice_dir, slip_dir,
                 invoice_printer, slip_printer,
+                failed=printing_failed_orders
             )
+        printing_failed_orders = [
+            "X #110407 — Packing Slip",
+            "X #110306 — Invoice",
+            "X #110312 — Invoice",
+            "X #110456 — Packing Slip"
+        ]
+        if printing_failed_orders:
+            # it means that printer has timed out and is to be notified to the admin
+            # there are two cases. which order is missing PDF slip and which is missing PDF invoice.
+            # we can seperate failed slip orders and failed invoice orders from the list
+            failed_invoice_orders = []
+            failed_slip_orders = []
+            for order in printing_failed_orders:
+                if "Invoice" in order:
+                    failed_invoice_orders.append(order.split(" ")[1])
+                if "Packing Slip" in order:
+                    failed_slip_orders.append(order.split(" ")[1])
+            
+            # now, needs to notify the admins to print these orders themselves
+            from html_formatter import HtmlFormatter
+            formatter = HtmlFormatter()
+
+            from mail_handler import MailHandling
+            mail_object = MailHandling()
+            for name, email in EMAILS_DATA:
+                message = formatter.build_failure_email(user_name=name, failed_invoices=failed_invoice_orders, failed_slips=failed_slip_orders)
+                mail_object.send_email(message=message,
+                                    receiver_email=email,
+                                    sender_email=EMAIL_FROM_USERNAME,
+                                    sender_password=EMAIL_FROM_PASSWORD,
+                                    email_subject='Development',
+                                    sender_name="ZED Managment Systems")
 
         # ── Merge invoices ────────────────────────────────────────────────
         merged_pdf_path = ''
