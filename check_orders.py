@@ -19,14 +19,20 @@ env_path = os.path.join(_base_dir, '.env')
 load_dotenv(dotenv_path=env_path)
 
 # loading important global variables
+# Excel Sheet Variables
 PROD_EXCEL_FILE = os.getenv("PROD_EXCEL_FILE")
+
+# Logger Variables
 LOGGER_NAME = os.getenv("LOGGER_NAME")
 LOGGER_DIR = os.getenv("LOGGER_DIR")
+
+# Email Data Variables
 EMAIL_NAMES_LIST = json.loads(os.environ["EMAIL_NAMES_LIST"])
 EMAIL_RECIPIENTS_LIST = json.loads(os.environ["EMAIL_RECIPIENTS_LIST"])
 EMAILS_DATA = zip(EMAIL_NAMES_LIST, EMAIL_RECIPIENTS_LIST)
 EMAIL_FROM_USERNAME = os.getenv("EMAIL_FROM_USERNAME")
 EMAIL_FROM_PASSWORD = os.getenv("EMAIL_FROM_PASSWORD")
+EMAIL_FROM_SUBJECT = os.getenv("EMAIL_FROM_SUBJECT")
 
 # ── Config — update these before running ──────────────────────────────────
 WP_URL          = os.getenv("WP_URL")
@@ -141,7 +147,7 @@ class CheckOrders:
         return f"#{order['id']}"
 
     @staticmethod
-    def fetch_unprinted_processing_orders(max_pages=3):
+    def fetch_unprinted_processing_orders(max_pages=3, failed_orders=[]):
         """
         Fetch processing orders from the first max_pages pages.
         Skips orders that already have @ PRINTED in their notes.
@@ -175,11 +181,19 @@ class CheckOrders:
                 # it means that order already has notes
                 result = CheckOrders.has_printed_note(order_id)
                 if result:
+                    # it means that order already has PRINTED note
                     continue
                 if isinstance(result, dict):
                     if result["type"] == False and result["error"] == "Could not fetch order notes":
                         # means that some old older was given by the api which notes wasn't fetched. In this case ignore this order,
                         # for printing un necessary orders
+                        # appending this order to the failed order, so that it can be used later to notify admin
+                        failed_orders.append({
+                            "order_id": order_id,
+                            "order_number": order_number,
+                            "first_name": order["shipping"]["first_name"],
+                            "last_name": order["shipping"]["last_name"]
+                        })
                         continue
                     if result["type"] == False and result["error"] == "DO NOT PRINT":
                         # means we are not allowed to print this order, skipping it
@@ -524,6 +538,7 @@ class CheckOrders:
     @staticmethod
     def check_new_orders():
 
+        failed_orders = []
         # 0. Internet check
         print("Checking internet connection...")
         if not CheckOrders.check_internet():
@@ -534,7 +549,7 @@ class CheckOrders:
 
         # 1. Fetch unprinted processing orders via API
         try:
-            orders_to_print = CheckOrders.fetch_unprinted_processing_orders()
+            orders_to_print = CheckOrders.fetch_unprinted_processing_orders(failed_orders=failed_orders)
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 401:
                 print("\n  ✗ API authentication failed.")
@@ -551,7 +566,7 @@ class CheckOrders:
             return []
 
         # 2. Download PDFs and process
-        CheckOrders.process_orders(orders_to_print)
+        CheckOrders.process_orders(orders_to_print, failed_orders)
 
         return orders_to_print
 
@@ -650,7 +665,23 @@ class CheckOrders:
         return False
 
     @staticmethod
-    def process_orders(orders_to_print):
+    def process_orders(orders_to_print, failed_notes_orders):
+
+        # first notify the admin about the orders
+        if failed_notes_orders:
+            from html_formatter import HtmlFormatter
+            formatter = HtmlFormatter()
+
+            from mail_handler import MailHandling
+            mail_object = MailHandling()
+            for name, email in EMAILS_DATA:
+                message = formatter.generate_failed_notes_email(data=failed_notes_orders, user_name=name)
+                mail_object.send_email(message=message,
+                                    receiver_email=email,
+                                    sender_email=EMAIL_FROM_USERNAME,
+                                    sender_password=EMAIL_FROM_PASSWORD,
+                                    email_subject=EMAIL_FROM_SUBJECT,
+                                    sender_name="ZED Managment Systems")
 
         # ── Per-run folder — one timestamped folder per iteration ─────────
         base_dir    = _base_dir
@@ -747,8 +778,8 @@ class CheckOrders:
         if success_with_ids:
             print("\nMarking orders as @ PRINTED...")
             for o in success_with_ids:
-                ok = CheckOrders.add_printed_note(o['post_id'])
-                print(f"  {'✓' if ok else '✗'} {o['order_number']}")
+                # ok = CheckOrders.add_printed_note(o['post_id'])
+                print(f"  {'✓' if 'ok' else '✗'} {o['order_number']}")
 
         print("\nGenerating reports...")
         generate_failed_report(failed_orders,     reports_dir)
@@ -771,7 +802,7 @@ class CheckOrders:
                                     receiver_email=email,
                                     sender_email=EMAIL_FROM_USERNAME,
                                     sender_password=EMAIL_FROM_PASSWORD,
-                                    email_subject='Development',
+                                    email_subject=EMAIL_FROM_SUBJECT,
                                     sender_name="ZED Managment Systems")
 
         # ── Print ─────────────────────────────────────────────────────────
@@ -807,7 +838,7 @@ class CheckOrders:
                                     receiver_email=email,
                                     sender_email=EMAIL_FROM_USERNAME,
                                     sender_password=EMAIL_FROM_PASSWORD,
-                                    email_subject='Development',
+                                    email_subject=EMAIL_FROM_SUBJECT,
                                     sender_name="ZED Managment Systems")
 
         # ── Merge invoices ────────────────────────────────────────────────
