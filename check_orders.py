@@ -778,8 +778,8 @@ class CheckOrders:
         if success_with_ids:
             print("\nMarking orders as @ PRINTED...")
             for o in success_with_ids:
-                # ok = CheckOrders.add_printed_note(o['post_id'])
-                print(f"  {'✓' if 'ok' else '✗'} {o['order_number']}")
+                ok = CheckOrders.add_printed_note(o['post_id'])
+                print(f"  {'✓' if ok else '✗'} {o['order_number']}")
 
         print("\nGenerating reports...")
         generate_failed_report(failed_orders,     reports_dir)
